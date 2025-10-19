@@ -75,11 +75,11 @@ def process_mri(row):
 
 def create_mri_dataset():
     df = pd.read_csv('dataset/mri/mri_path.csv')
-    # for index, row in tqdm(df.iterrows(), total=len(df), leave=False):
-    #     img = read_image(row['path'])
-    #     log_3d(img, file_name=f'log/mri/raw/{row["Image Data ID"]}')
-    with ProcessPoolExecutor(max_workers=mp.cpu_count()) as executor:
-        tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df))
+    for index, row in tqdm(df.iterrows(), total=len(df), leave=False):
+        img = read_image(row['path'])
+        log_3d(img, file_name=f'log/mri/raw/{row["Image Data ID"]}')
+    # with ProcessPoolExecutor(max_workers=mp.cpu_count()) as executor:
+    #     tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df))
 
 
 def run():
