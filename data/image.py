@@ -70,7 +70,11 @@ def read_image(path: str) -> np.ndarray:
 
 def process_mri(row):
     img = read_image(row['path'])
-    log_3d(img, file_name=f'log/mri/raw/{row["Image Data ID"]}')
+    try:
+        log_3d(img, file_name=f'log/mri/raw/{row["Image Data ID"]}')
+    except:
+        print(row['path'])
+        print(img.shape)
 
 
 def create_mri_dataset():
