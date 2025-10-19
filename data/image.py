@@ -1,7 +1,13 @@
 import os
+from concurrent.futures import ProcessPoolExecutor
+import multiprocessing as mp
 
+import numpy as np
 import pandas as pd
+import pydicom
 from tqdm import tqdm
+
+from data.utils import log_3d
 
 MRI_BLACKLIST_ID = ['I200978', 'I11193011', 'I180185', 'I217885']
 
@@ -52,6 +58,31 @@ def mri_info(mri_path):
     df.to_csv("mri_path.csv", index=False)
 
 
+def read_image(path: str) -> np.ndarray:
+    files = [os.path.join(path, f) for f in os.listdir(path) if f.endswith('.dcm')]
+    # files = sorted(glob.glob(f"{path}/*.dcm"),
+    #                key=lambda f: pydicom.dcmread(f, stop_before_pixels=True).InstanceNumber)
+    slices = [pydicom.dcmread(f) for f in files]
+    slices.sort(key=lambda x: x.InstanceNumber)
+    image_3d = np.stack([s.pixel_array for s in slices])
+    return image_3d.squeeze()
+
+
+def process_mri(row):
+    img = read_image(row['path'])
+    log_3d(img, file_name=f'log/mri/raw/{row["Image Data ID"]}')
+
+
+def create_mri_dataset():
+    df = pd.read_csv('dataset/mri/mri_path.csv')
+    # for index, row in tqdm(df.iterrows(), total=len(df), leave=False):
+    #     img = read_image(row['path'])
+    #     log_3d(img, file_name=f'log/mri/raw/{row["Image Data ID"]}')
+    with ProcessPoolExecutor(max_workers=mp.cpu_count()) as executor:
+        tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df))
+
+
 def run():
     # merge_mri_descriptions_csv()
-    mri_info('dataset/mri/ADNI')
+    # mri_info('dataset/mri/ADNI')
+    create_mri_dataset()

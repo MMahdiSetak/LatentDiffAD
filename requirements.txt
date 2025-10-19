@@ -1,2 +1,5 @@
 pandas
 tqdm
+numpy
+pydicom
+matplotlib
