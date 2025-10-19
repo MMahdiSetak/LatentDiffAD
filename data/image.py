@@ -115,8 +115,8 @@ def process_mri(row):
         stripped_path = skull_stripping(img, img_id, temp_dir)
         processed_mri = mri_registration(stripped_path)
     try:
-        # log_3d(processed_mri, file_name=f'log/mri/processed/{row["Image Data ID"]}')
-        log_3d(processed_mri, file_name=None)
+        log_3d(processed_mri, file_name=f'log/mri/processed/{row["Image Data ID"]}')
+        # log_3d(processed_mri, file_name=None)
     except:
         print(row['path'])
         print(img.shape)
