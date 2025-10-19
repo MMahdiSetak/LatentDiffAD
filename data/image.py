@@ -17,7 +17,7 @@ def merge_mri_descriptions_csv():
     # Save result
     # combined_df.to_csv("mri.csv", index=False)
     print(f"Combined {len(df_list)} files into combined_data.csv ({len(combined_df)} rows)")
-    print(f"unique subjects: {combined_df['Subject'].unique()}")
+    print(f"unique subjects: {len(combined_df['Subject'].unique())}")
 
 
 def mri_info(mri_path):
@@ -48,7 +48,7 @@ def mri_info(mri_path):
     print(f'all rows: {len(df)}')
     df = df.dropna(subset=['path'])
     print(f'rows with image: {len(df)}')
-    print(f"final unique subjects: {df['Subject'].unique()}")
+    print(f"final unique subjects: {len(df['Subject'].unique())}")
     df.to_csv("mri_path.csv", index=False)
 
 
