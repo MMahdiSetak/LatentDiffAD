@@ -96,5 +96,5 @@ def create_mri_dataset():
 
 def run():
     # merge_mri_descriptions_csv()
-    mri_info('dataset/mri/ADNI')
-    # create_mri_dataset()
+    # mri_info('dataset/mri/ADNI')
+    create_mri_dataset()
