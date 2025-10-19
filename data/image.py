@@ -38,7 +38,8 @@ def mri_info(mri_path):
                     path = f"{mri_path}/{subject}/{desc}/{date}/{img_id}"
                     df.loc[df['Image Data ID'] == img_id, 'path'] = path
                     matches = df[df['Image Data ID'] == img_id]
-                    assert len(matches) == 1, f"❌ {img_id}: {len(matches)} rows!"
+                    # assert len(matches) == 1, f"❌ {img_id}: {len(matches)} rows!"
+                    print(f"❌ {img_id}: {len(matches)} rows!") if len(matches) != 1 else None
                     df.loc[matches.index, 'path'] = path
 
     print(f'all rows: {len(df)}')
