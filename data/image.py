@@ -98,7 +98,7 @@ def mri_registration(path):
         registration = ants.registration(
             fixed=mri_template,
             moving=moving_image,
-            type_of_transform='Rigid',
+            type_of_transform='Affine',
             outprefix=outprefix
         )
 
