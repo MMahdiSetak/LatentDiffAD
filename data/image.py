@@ -9,7 +9,11 @@ from tqdm import tqdm
 
 from data.utils import log_3d
 
-MRI_BLACKLIST_ID = ['I200978', 'I11193011', 'I180185', 'I217885']
+MRI_BLACKLIST_ID = [
+    'I200978', 'I11193011', 'I180185', 'I217885',  # no data
+    'I11096353', 'I11088545',  # broken image
+    'I32421', 'I32853', 'I74064'
+]
 
 
 def merge_mri_descriptions_csv():
@@ -70,23 +74,27 @@ def read_image(path: str) -> np.ndarray:
 
 def process_mri(row):
     img = read_image(row['path'])
-    try:
-        log_3d(img, file_name=f'log/mri/raw/{row["Image Data ID"]}')
-    except:
-        print(row['path'])
-        print(img.shape)
+    # try:
+    #     log_3d(img, file_name=f'log/mri/raw/{row["Image Data ID"]}')
+    # except:
+    #     print(row['path'])
+    #     print(img.shape)
+    return img.shape
 
 
 def create_mri_dataset():
     df = pd.read_csv('dataset/mri/mri_path.csv')
+    # for row in tqdm(df.itertuples(), total=len(df), leave=False):
     # for index, row in tqdm(df.iterrows(), total=len(df), leave=False):
-    #     img = read_image(row['path'])
-    #     log_3d(img, file_name=f'log/mri/raw/{row["Image Data ID"]}')
+    # img = read_image(row.path)
+    # img = read_image(row.path)
+    # log_3d(img, file_name=f'log/mri/raw/{row["Image Data ID"]}')
     with ProcessPoolExecutor(max_workers=mp.cpu_count()) as executor:
-        list(tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df)))
+        shapes = list(tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df)))
+    print(np.unique(shapes, axis=0, return_counts=True))
 
 
 def run():
     # merge_mri_descriptions_csv()
-    # mri_info('dataset/mri/ADNI')
-    create_mri_dataset()
+    mri_info('dataset/mri/ADNI')
+    # create_mri_dataset()
