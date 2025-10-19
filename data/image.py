@@ -3,6 +3,8 @@ import os
 import pandas as pd
 from tqdm import tqdm
 
+MRI_BLACKLIST_ID = ['I200978']
+
 
 def merge_mri_descriptions_csv():
     mpr = pd.read_csv('dataset/mri/MPRAGE.csv')
@@ -30,6 +32,8 @@ def mri_info(mri_path):
             for date in tqdm(dates, leave=False):
                 img_ids = os.listdir(f"{mri_path}/{subject}/{desc}/{date}")
                 for img_id in img_ids:
+                    if img_id in MRI_BLACKLIST_ID:
+                        continue
                     # print(img_id)
                     path = f"{mri_path}/{subject}/{desc}/{date}/{img_id}"
                     df.loc[df['Image Data ID'] == img_id, 'path'] = path
