@@ -1,19 +1,25 @@
 import os
+import subprocess
+import tempfile
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing as mp
 
+import ants
 import numpy as np
 import pandas as pd
 import pydicom
 from tqdm import tqdm
+import nibabel as nib
 
 from data.utils import log_3d
 
 MRI_BLACKLIST_ID = [
     'I200978', 'I11193011', 'I180185', 'I217885',  # no data
     'I11096353', 'I11088545',  # broken image
-    'I32421', 'I32853', 'I74064'
+    'I32421', 'I32853', 'I74064'  # not brain mri
 ]
+affine = np.eye(4)
+mri_template = ants.image_read('template/stripped_cropped.nii')
 
 
 def merge_mri_descriptions_csv():
@@ -64,34 +70,72 @@ def mri_info(mri_path):
 
 def read_image(path: str) -> np.ndarray:
     files = [os.path.join(path, f) for f in os.listdir(path) if f.endswith('.dcm')]
-    # files = sorted(glob.glob(f"{path}/*.dcm"),
-    #                key=lambda f: pydicom.dcmread(f, stop_before_pixels=True).InstanceNumber)
     slices = [pydicom.dcmread(f) for f in files]
     slices.sort(key=lambda x: x.InstanceNumber)
     image_3d = np.stack([s.pixel_array for s in slices])
     return image_3d.squeeze()
 
 
+def skull_stripping(img, id, temp_dir):
+    input_path = os.path.join(temp_dir, f"{id}.nii")
+    output_path = os.path.join(temp_dir, f"{id}_stripped.nii")
+    nifti_img = nib.Nifti1Image(img, affine)
+    nib.save(nifti_img, input_path)
+    command = f'docker run --rm --gpus all -v {temp_dir}:/temp freesurfer/synthstrip:1.6 -i /temp/{id}.nii -o /temp/{id}_stripped.nii'
+    proc = subprocess.Popen(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc.wait()
+    if proc.returncode != 0:
+        print(f'stripping failed: {proc.returncode}')
+    return output_path
+    # return nib.load(f"{id}_stripped.nii").get_fdata()
+
+
+def mri_registration(path):
+    moving_image = ants.image_read(path)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        outprefix = os.path.join(temp_dir, "registration_")
+
+        registration = ants.registration(
+            fixed=mri_template,
+            moving=moving_image,
+            type_of_transform='Rigid',
+            outprefix=outprefix
+        )
+
+        return registration["warpedmovout"].numpy()
+
+
 def process_mri(row):
-    img = read_image(row['path'])
-    # try:
-    #     log_3d(img, file_name=f'log/mri/raw/{row["Image Data ID"]}')
-    # except:
-    #     print(row['path'])
-    #     print(img.shape)
-    return img.shape
+    img_id = row['Image Data ID']
+    path = row['path']
+    img = read_image(path)
+    img = np.transpose(img, (0, 2, 1))
+    img = img[::-1, ::-1, ::-1]
+    with tempfile.TemporaryDirectory() as temp_dir:
+        stripped_path = skull_stripping(img, img_id, temp_dir)
+        processed_mri = mri_registration(stripped_path)
+    try:
+        # log_3d(processed_mri, file_name=f'log/mri/processed/{row["Image Data ID"]}')
+        log_3d(processed_mri, file_name=None)
+    except:
+        print(row['path'])
+        print(img.shape)
+    # return img.shape
 
 
 def create_mri_dataset():
     df = pd.read_csv('dataset/mri/mri_path.csv')
     # for row in tqdm(df.itertuples(), total=len(df), leave=False):
     # for index, row in tqdm(df.iterrows(), total=len(df), leave=False):
+    #     process_mri(row)
     # img = read_image(row.path)
     # img = read_image(row.path)
     # log_3d(img, file_name=f'log/mri/raw/{row["Image Data ID"]}')
-    with ProcessPoolExecutor(max_workers=mp.cpu_count()) as executor:
-        shapes = list(tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df)))
-    print(np.unique(shapes, axis=0, return_counts=True))
+    # with ProcessPoolExecutor(max_workers=mp.cpu_count()) as executor:
+    with ProcessPoolExecutor(max_workers=4) as executor:
+        # shapes = list(tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df)))
+        list(tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df)))
+    # print(np.unique(shapes, axis=0, return_counts=True))
 
 
 def run():

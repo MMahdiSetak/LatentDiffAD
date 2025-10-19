@@ -3,3 +3,5 @@ tqdm
 numpy
 pydicom
 matplotlib
+nibabel
+antspyx
