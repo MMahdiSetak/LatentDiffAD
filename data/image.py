@@ -78,9 +78,8 @@ def create_mri_dataset():
     # for index, row in tqdm(df.iterrows(), total=len(df), leave=False):
     #     img = read_image(row['path'])
     #     log_3d(img, file_name=f'log/mri/raw/{row["Image Data ID"]}')
-    # with ProcessPoolExecutor(max_workers=mp.cpu_count()) as executor:
-    with ProcessPoolExecutor(max_workers=4) as executor:
-        tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df))
+    with ProcessPoolExecutor(max_workers=mp.cpu_count()) as executor:
+        list(tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df)))
 
 
 def run():
