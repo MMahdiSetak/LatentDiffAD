@@ -92,6 +92,7 @@ def skull_stripping(img, id, temp_dir):
 
 def mri_registration(path):
     moving_image = ants.image_read(path)
+    moving_image = ants.n4_bias_field_correction(moving_image)
     with tempfile.TemporaryDirectory() as temp_dir:
         outprefix = os.path.join(temp_dir, "registration_")
 
@@ -105,6 +106,19 @@ def mri_registration(path):
         return registration["warpedmovout"].numpy()
 
 
+def z_normalize_image(img: np.ndarray) -> np.ndarray:
+    img = np.maximum(img, 0)  # Clip negatives if any (common in raw MRI)
+    mask = img > 0
+    foreground = img[mask]
+    p1, p99 = np.percentile(foreground, [1, 99])
+    img = np.clip(img, p1, p99)
+    foreground = img[mask]
+    mean = np.mean(foreground)
+    std = np.std(foreground)
+    img = (img - mean) / std
+    return img.astype(np.float32)
+
+
 def process_mri(row):
     img_id = row['Image Data ID']
     path = row['path']
@@ -114,8 +128,9 @@ def process_mri(row):
     with tempfile.TemporaryDirectory() as temp_dir:
         stripped_path = skull_stripping(img, img_id, temp_dir)
         processed_mri = mri_registration(stripped_path)
+    processed_mri = z_normalize_image(processed_mri)
     try:
-        log_3d(processed_mri, file_name=f'log/mri/processed/{row["Image Data ID"]}')
+        log_3d(processed_mri, file_name=f'log/mri/full_processed/{row["Image Data ID"]}')
         # log_3d(processed_mri, file_name=None)
     except:
         print(row['path'])
@@ -132,7 +147,7 @@ def create_mri_dataset():
     # img = read_image(row.path)
     # log_3d(img, file_name=f'log/mri/raw/{row["Image Data ID"]}')
     # with ProcessPoolExecutor(max_workers=mp.cpu_count()) as executor:
-    with ProcessPoolExecutor(max_workers=4) as executor:
+    with ProcessPoolExecutor(max_workers=8) as executor:
         # shapes = list(tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df)))
         list(tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df)))
     # print(np.unique(shapes, axis=0, return_counts=True))
