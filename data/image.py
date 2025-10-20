@@ -147,7 +147,7 @@ def create_mri_dataset():
     # img = read_image(row.path)
     # log_3d(img, file_name=f'log/mri/raw/{row["Image Data ID"]}')
     # with ProcessPoolExecutor(max_workers=mp.cpu_count()) as executor:
-    with ProcessPoolExecutor(max_workers=8) as executor:
+    with ProcessPoolExecutor(max_workers=4) as executor:
         # shapes = list(tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df)))
         list(tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df)))
     # print(np.unique(shapes, axis=0, return_counts=True))
