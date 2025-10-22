@@ -10,6 +10,7 @@ import pandas as pd
 import pydicom
 from tqdm import tqdm
 import nibabel as nib
+from skimage.metrics import structural_similarity as ssim
 
 from data.utils import log_3d
 
@@ -20,6 +21,8 @@ MRI_BLACKLIST_ID = [
 ]
 affine = np.eye(4)
 mri_template = ants.image_read('template/stripped_cropped.nii')
+slice_template = None
+template_range = 2
 
 
 def merge_mri_descriptions_csv():
@@ -129,28 +132,43 @@ def process_mri(row):
         stripped_path = skull_stripping(img, img_id, temp_dir)
         processed_mri = mri_registration(stripped_path)
     processed_mri = z_normalize_image(processed_mri)
+
+    slice_processed = processed_mri[:, :, 80]
+    ssim_val = ssim(slice_processed, slice_template, data_range=max(
+        template_range,
+        slice_processed.max() - slice_processed.min()
+    ))
     try:
         log_3d(processed_mri, file_name=f'log/mri/full_processed/{row["Image Data ID"]}')
         # log_3d(processed_mri, file_name=None)
     except:
         print(row['path'])
         print(img.shape)
-    # return img.shape
+    return {'img_id': img_id, 'ssim': ssim_val}
 
 
 def create_mri_dataset():
+    global slice_template, template_range
+    slice_template = z_normalize_image(mri_template.numpy())[:, :, 80]
+    template_range = slice_template.max() - slice_template.min()
     df = pd.read_csv('dataset/mri/mri_path.csv')
     # for row in tqdm(df.itertuples(), total=len(df), leave=False):
+    # results = []
     # for index, row in tqdm(df.iterrows(), total=len(df), leave=False):
-    #     process_mri(row)
+    #     results.append(process_mri(row))
+    #     if index == 10:
+    #         break
     # img = read_image(row.path)
     # img = read_image(row.path)
     # log_3d(img, file_name=f'log/mri/raw/{row["Image Data ID"]}')
     # with ProcessPoolExecutor(max_workers=mp.cpu_count()) as executor:
     with ProcessPoolExecutor(max_workers=4) as executor:
-        # shapes = list(tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df)))
-        list(tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df)))
+        results = list(tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df)))
+    # list(tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df)))
     # print(np.unique(shapes, axis=0, return_counts=True))
+    metrics_df = pd.DataFrame(results)
+    metrics_df.to_csv('mri_metrics.csv', index=False)
+    print(f"Saved metrics for {len(metrics_df)} images to mri_metrics.csv")
 
 
 def run():

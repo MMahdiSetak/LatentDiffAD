@@ -5,3 +5,4 @@ pydicom
 matplotlib
 nibabel
 antspyx
+scikit-image
