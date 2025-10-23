@@ -131,19 +131,18 @@ def process_mri(row):
     with tempfile.TemporaryDirectory() as temp_dir:
         stripped_path = skull_stripping(img, img_id, temp_dir)
         processed_mri = mri_registration(stripped_path)
-    processed_mri = z_normalize_image(processed_mri)
-
-    slice_processed = processed_mri[:, :, 80]
-    ssim_val = ssim(slice_processed, slice_template, data_range=max(
-        template_range,
-        slice_processed.max() - slice_processed.min()
-    ))
     try:
+        processed_mri = z_normalize_image(processed_mri)
         log_3d(processed_mri, file_name=f'log/mri/full_processed/{row["Image Data ID"]}')
         # log_3d(processed_mri, file_name=None)
     except:
         print(row['path'])
         print(img.shape)
+    slice_processed = processed_mri[:, :, 80]
+    ssim_val = ssim(slice_processed, slice_template, data_range=max(
+        template_range,
+        slice_processed.max() - slice_processed.min()
+    ))
     return {'img_id': img_id, 'ssim': ssim_val}
 
 
