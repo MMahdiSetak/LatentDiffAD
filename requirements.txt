@@ -6,3 +6,4 @@ matplotlib
 nibabel
 antspyx
 scikit-image
+h5py

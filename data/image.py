@@ -1,10 +1,11 @@
 import os
 import subprocess
 import tempfile
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing as mp
 
 import ants
+import h5py
 import numpy as np
 import pandas as pd
 import pydicom
@@ -42,6 +43,7 @@ def merge_mri_descriptions_csv():
 def mri_info(mri_path):
     df = pd.read_csv('dataset/mri/mri.csv')
     df['path'] = None
+    df['processed'] = False
     total_images = 0
 
     subjects = os.listdir(mri_path)
@@ -65,10 +67,10 @@ def mri_info(mri_path):
 
     print(f"Total images: {total_images}")
     print(f'all rows: {len(df)}')
-    df = df.dropna(subset=['path'])
+    df = df.dropna(subset=['path']).reset_index(drop=True)
     print(f'rows with image: {len(df)}')
     print(f"final unique subjects: {len(df['Subject'].unique())}")
-    df.to_csv("mri_path.csv", index=False)
+    df.to_csv("mri_info.csv", index=False)
 
 
 def read_image(path: str) -> np.ndarray:
@@ -122,7 +124,10 @@ def z_normalize_image(img: np.ndarray) -> np.ndarray:
     return img.astype(np.float32)
 
 
-def process_mri(row):
+def process_mri(index, row):
+    success = False
+    if row['processed']:
+        return {'index': index, 'success': success}
     img_id = row['Image Data ID']
     path = row['path']
     img = read_image(path)
@@ -133,28 +138,43 @@ def process_mri(row):
         processed_mri = mri_registration(stripped_path)
     try:
         processed_mri = z_normalize_image(processed_mri)
-        log_3d(processed_mri, file_name=f'log/mri/full_processed/{row["Image Data ID"]}')
+        # with write_lock:
+        #     h5f_shared['mri'][index] = processed_mri
+        #     h5f_shared.flush()
+        success = True
+        # log_3d(processed_mri, file_name=f'log/mri/full_processed/{row["Image Data ID"]}')
         # log_3d(processed_mri, file_name=None)
-    except:
+    except Exception as e:
         print(row['path'])
         print(img.shape)
-    slice_processed = processed_mri[:, :, 80]
-    ssim_val = ssim(slice_processed, slice_template, data_range=max(
-        template_range,
-        slice_processed.max() - slice_processed.min()
-    ))
-    return {'img_id': img_id, 'ssim': ssim_val}
+        print(str(e))
+
+    # slice_processed = processed_mri[:, :, 80]
+    # ssim_val = ssim(slice_processed, slice_template, data_range=max(
+    #     template_range,
+    #     slice_processed.max() - slice_processed.min()
+    # ))
+    # return {'index': index, 'ssim': ssim_val, 'success': success}
+    return {'index': index, 'success': success, 'mri': processed_mri}
 
 
 def create_mri_dataset():
     global slice_template, template_range
     slice_template = z_normalize_image(mri_template.numpy())[:, :, 80]
     template_range = slice_template.max() - slice_template.min()
-    df = pd.read_csv('dataset/mri/mri_path.csv')
+    df = pd.read_csv('dataset/mri/mri_info.csv')
+    mri_dataset_file = 'dataset/mri/mri_dataset.hdf5'
+    if not os.path.exists(mri_dataset_file):
+        with h5py.File(mri_dataset_file, 'w') as h5f:
+            h5f.create_dataset('mri', (len(df), *mri_template.shape), dtype='float32')
+            h5f.flush()
     # for row in tqdm(df.itertuples(), total=len(df), leave=False):
+    # global h5f_shared, write_lock
+    h5f_shared = h5py.File(mri_dataset_file, 'r+')
+    # write_lock = mp.Lock()
     # results = []
     # for index, row in tqdm(df.iterrows(), total=len(df), leave=False):
-    #     results.append(process_mri(row))
+    #     results.append(process_mri(index, row))
     #     if index == 10:
     #         break
     # img = read_image(row.path)
@@ -162,15 +182,26 @@ def create_mri_dataset():
     # log_3d(img, file_name=f'log/mri/raw/{row["Image Data ID"]}')
     # with ProcessPoolExecutor(max_workers=mp.cpu_count()) as executor:
     with ProcessPoolExecutor(max_workers=8) as executor:
-        results = list(tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df)))
+        # with ProcessPoolExecutor(max_workers=4, initializer=init_worker, initargs=(mri_dataset_file, lock)) as executor:
+        # results = list(tqdm(executor.map(process_mri, [(index, row) for index, row in df.iterrows()]), total=len(df)))
+        futures = [executor.submit(process_mri, index, row) for index, row in df.iterrows()]
+        # futures = [executor.submit(process_mri, [(index, row) for index, row in df.iterrows()]
+        for future in tqdm(as_completed(futures), total=len(df)):
+            res = future.result()
+            if res['success']:
+                h5f_shared['mri'][res['index']] = res['mri']
+                h5f_shared.flush()
+                df.loc[res['index'], 'processed'] = True
+                df.to_csv('dataset/mri/mri_info.csv', index=False)
     # list(tqdm(executor.map(process_mri, [row for _, row in df.iterrows()]), total=len(df)))
     # print(np.unique(shapes, axis=0, return_counts=True))
-    metrics_df = pd.DataFrame(results)
-    metrics_df.to_csv('mri_metrics.csv', index=False)
-    print(f"Saved metrics for {len(metrics_df)} images to mri_metrics.csv")
+    # metrics_df = pd.DataFrame(results)
+    # metrics_df.to_csv('mri_metrics.csv', index=False)
+    # print(f"Saved metrics for {len(metrics_df)} images to mri_metrics.csv")
+    h5f_shared.close()
 
 
 def run():
     # merge_mri_descriptions_csv()
-    # mri_info('dataset/mri/ADNI')
-    create_mri_dataset()
+    mri_info('dataset/mri/ADNI')
+    # create_mri_dataset()
